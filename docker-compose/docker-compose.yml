@@ -33,11 +33,6 @@ services:
         RELEASE_VERSION: 8.1.1
     links:
       - db:database
-    environment:
-        ETHEREUM_JSONRPC_HTTP_URL: http://host.docker.internal:8545/
-        ETHEREUM_JSONRPC_TRACE_URL: http://host.docker.internal:8545/
-        ETHEREUM_JSONRPC_WS_URL: ws://host.docker.internal:8545/
-        CHAIN_ID: '1337'
 
   nft_media_handler:
     depends_on:
@@ -55,6 +50,13 @@ services:
     extends:
       file: ./services/visualizer.yml
       service: visualizer
+  
+  sc-verifier:
+    extends:
+      file: ./services/smart-contract-verifier.yml
+      service: smart-contract-verifier
+    ports:
+      - 8082:8050
 
   sig-provider:
     extends:
@@ -102,6 +104,7 @@ services:
       - backend
       - frontend
       - stats
+      - sc-verifier
     extends:
       file: ./services/nginx.yml
       service: proxy
