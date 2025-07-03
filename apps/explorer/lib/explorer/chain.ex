@@ -2163,20 +2163,28 @@ defmodule Explorer.Chain do
     tx_filter =
       case {to_addr_res, from_addr_res} do
         {{:ok, to_addr}, {:ok, from_addr}} ->
-          dynamic([_block, tx], tx.to_address_hash != ^to_addr and tx.from_address_hash != ^from_addr)
+          dynamic([tx], tx.to_address_hash != ^to_addr and tx.from_address_hash != ^from_addr)
         _ ->
           true
       end
 
-    block_query =
-      from(block in Block,
-        where: block.consensus == true,
-        join: tx in assoc(block, :transactions),
+    block_numbers_query =
+      from(tx in Transaction,
         where: not is_nil(tx.block_number) and not is_nil(tx.index),
         where: ^tx_filter,
-        select: block,
-        order_by: [desc: block.number],
+        select: tx.block_number,
+        distinct: true,
+        order_by: [desc: tx.block_number],
         limit: ^paging_options.page_size
+      )
+
+    block_numbers = Repo.all(block_numbers_query)
+
+    # filter blocks by block_number
+    block_query =
+      from(block in Block,
+        where: block.consensus == true and block.number in ^block_numbers,
+        order_by: [desc: block.number]
       )
 
     block_query = join_associations(block_query, necessity_by_association)
