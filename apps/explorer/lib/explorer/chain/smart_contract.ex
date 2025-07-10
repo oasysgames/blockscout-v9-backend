@@ -242,7 +242,7 @@ defmodule Explorer.Chain.SmartContract do
     @dead_address_hash_string
   end
 
-  @default_sorting [desc: :inserted_at]
+  @default_sorting [asc: :hash]
 
   @typedoc """
   The name of a parameter to a function or event.
