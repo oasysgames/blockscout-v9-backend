@@ -26,7 +26,7 @@ services:
     extends:
       file: ./services/backend.yml
       service: backend
-    image: blockscout-backend:v8.1.1
+    image: blockscout-backend:v9.0.2
     build:
       context: ..
       dockerfile: ./docker/Dockerfile
@@ -38,7 +38,7 @@ services:
         CACHE_TOTAL_GAS_USAGE_COUNTER_ENABLED: ""
         CACHE_ADDRESS_WITH_BALANCES_UPDATE_INTERVAL: ""
         ADMIN_PANEL_ENABLED: ""
-        RELEASE_VERSION: 8.1.1
+        BLOCKSCOUT_VERSION: 9.0.2
     links:
       - db:database
 

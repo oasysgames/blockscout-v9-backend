@@ -3,7 +3,7 @@ version: '3.9'
 services:
   backend:
     # image: ghcr.io/blockscout/${DOCKER_REPO:-blockscout}:${DOCKER_TAG:-latest}
-    image: blockscout-backend:v8.1.1
+    image: blockscout-backend:v9.0.2
     pull_policy: always
     restart: always
     stop_grace_period: 5m
