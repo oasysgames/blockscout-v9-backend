@@ -105,9 +105,19 @@ EOF
 scan_transaction_errors() {
     local log_content="$1"
     local timestamp=$(date '+%Y%m%d_%H%M%S')
-    local temp_file="/tmp/transaction_errors_${timestamp}.log"
+        local temp_file="/tmp/transaction_errors_${timestamp}.log"
+    local seen_tx_file="/tmp/seen_transactions_${timestamp}.txt"
     
-    log "Scanning transaction errors from log content"
+    # Initialize seen transactions file
+    touch "$seen_tx_file"
+    
+    log "Scanning transaction errors from log content with deduplication"
+    
+    # Check if we have recent track file for deduplication
+    local track_file="/tmp/transaction_tracker.json"
+    if [ ! -f "$track_file" ]; then
+        echo "{}" > "$track_file"
+    fi
     
     # Extract only transaction-related error lines
     echo "$log_content" | grep -E "(transaction.*error|transaction.*failed|transaction.*timeout|transaction.*exception|tx.*error|tx.*failed|block.*error|block.*failed|invalid.*transaction|transaction.*not.*found|transaction.*execution.*failed)" | \
@@ -137,7 +147,33 @@ scan_transaction_errors() {
         
         # Only process if we found transaction hash or block number (transaction-related)
         if [ -n "$tx_hash" ] || [ -n "$block_num" ]; then
-            echo "{\"timestamp\":\"${timestamp}\",\"error_type\":\"${error_type}\",\"transaction_hash\":\"${tx_hash}\",\"block_number\":\"${block_num}\",\"message\":\"${line}\"}" >> "$temp_file"
+            # Create unique identifier for this transaction error
+            local unique_id=""
+            if [ -n "$tx_hash" ]; then
+                unique_id="${error_type}_${tx_hash}"
+            elif [ -n "$block_num" ]; then
+                unique_id="${error_type}_block_${block_num}"
+            fi
+            
+            # Check if we've already seen this transaction error recently
+            if [ -n "$unique_id" ] && ! grep -q "^${unique_id}$" "$seen_tx_file"; then
+                # Record this transaction as seen
+                echo "$unique_id" >> "$seen_tx_file"
+                
+                # Add to JSON output only if not recently processed
+                local current_time=$(date +%s)
+                local recent_window=$((SCAN_INTERVAL * 2))  # 2x scan interval window
+                local was_processed=$(cat "$track_file" | jq -r ".\"${unique_id}\" // empty" 2>/dev/null || echo "")
+                
+                if [ -z "$was_processed" ] || [ $((current_time - was_processed)) -gt $recent_window ]; then
+                    echo "{\"timestamp\":\"${timestamp}\",\"error_type\":\"${error_type}\",\"transaction_hash\":\"${tx_hash}\",\"block_number\":\"${block_num}\",\"message\":\"${line}\",\"unique_id\":\"${unique_id}\"}" >> "$temp_file"
+                    
+                    # Update tracking file with current timestamp
+                    cat "$track_file" | jq ". + {\"${unique_id}\": ${current_time}}" > "$track_file.tmp" 2>/dev/null && mv "$track_file.tmp" "$track_file" || echo "$unique_id:$current_time" >> "$track_file"
+                else
+                    log "Skipping duplicate transaction error: ${unique_id} (processed $(((current_time - was_processed)))s ago)"
+                fi
+            fi
         fi
     done
     
@@ -157,11 +193,17 @@ scan_transaction_errors() {
             local s3_url="https://s3.${AWS_REGION}.amazonaws.com/${S3_BUCKET}/${s3_key}"
             send_slack_alert "🚨 Transaction errors detected _(${error_count} errors)_" "transaction" "" "" "$s3_url"
         else
-            error "Failed to upload transaction error log to S the_S3"
+            error "Failed to upload transaction error log to S3"
         fi
         
-        # Clean up temp file
-        rm -f "$temp_file"
+        # Clean up temp files and old tracking data (keep recent tracking)
+        rm -f "$temp_file" "$seen_tx_file"
+        
+        # Clean up old entries from tracking file (older than 24 hours)
+        local cleanup_threshold=$(($(date +%s) - 86400))
+        if [ -f "$track_file" ]; then
+            cat "$track_file" | jq "with_entries(select(.value > ${cleanup_threshold}))" > "$track_file.tmp" 2>/dev/null && mv "$track_file.tmp" "$track_file" || echo "{}" > "$track_file"
+        fi
     else
         log "No transaction-related errors found"
     fi
