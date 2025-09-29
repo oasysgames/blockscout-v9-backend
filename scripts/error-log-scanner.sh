@@ -211,7 +211,7 @@ scan_transaction_errors() {
 
 # Monitor Docker containers
 monitor_docker_containers() {
-    local containers=("backend" "stats" "sc-verifier")
+    local containers=("backend")
     local found_errors=false
     
     log "Monitoring Docker containers: ${containers[*]}"
