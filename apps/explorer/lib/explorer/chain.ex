@@ -2115,7 +2115,7 @@ defmodule Explorer.Chain do
   def transactions_available_for_home(page_size) do
     {:ok, to_address_filter} = Chain.string_to_address_hash(get_op_node_to_address())
     {:ok, from_address_filter} = Chain.string_to_address_hash(get_op_node_from_address())
-    
+
     # Address to filter out (must be lowercase to match database format)
     op_node_address = get_op_node_from_address()
     {:ok, op_node_address_hash} = Chain.string_to_address_hash(op_node_address)
@@ -2128,7 +2128,10 @@ defmodule Explorer.Chain do
     |> from(as: :transaction)
     |> where([transaction], not is_nil(transaction.block_number) and not is_nil(transaction.index))
     |> where([transaction], transaction.from_address_hash != ^op_node_address_hash)
-    |> where([transaction], transaction.to_address_hash != ^to_address_filter and transaction.from_address_hash != ^from_address_filter)
+    |> where(
+      [transaction],
+      transaction.to_address_hash != ^to_address_filter and transaction.from_address_hash != ^from_address_filter
+    )
     |> where(
       [transaction],
       exists(
@@ -2164,9 +2167,10 @@ defmodule Explorer.Chain do
       `:key` (a tuple of the lowest/oldest `{block_number, index}`) and. Results will be the transactions older than
       the `block_number` and `index` that are passed.
   """
-  @spec recent_collated_transactions_for_home(true | false, [paging_options | necessity_by_association_option | api?]) :: [
-    Transaction.t()
-  ]
+  @spec recent_collated_transactions_for_home(true | false, [paging_options | necessity_by_association_option | api?]) ::
+          [
+            Transaction.t()
+          ]
   def recent_collated_transactions_for_home(old_ui?, options \\ [])
       when is_list(options) do
     necessity_by_association = Keyword.get(options, :necessity_by_association, %{})
