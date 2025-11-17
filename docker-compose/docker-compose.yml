@@ -30,7 +30,7 @@ services:
       context: ..
       dockerfile: ./docker/Dockerfile
       args:
-        RELEASE_VERSION: 9.1.0
+        RELEASE_VERSION: 9.1.1
     links:
       - db:database
 
@@ -44,7 +44,7 @@ services:
       context: ..
       dockerfile: ./docker/Dockerfile
       args:
-        RELEASE_VERSION: 9.1.0
+        RELEASE_VERSION: 9.1.1
 
   visualizer:
     extends:
