@@ -1480,7 +1480,6 @@ defmodule Explorer.Chain.SmartContract do
     |> SortingHelper.page_with_sorting(paging_options, sorting_options, default_sorting_options)
     |> Chain.join_associations(necessity_by_association)
     |> Chain.select_repo(options).all()
-    
   end
 
   @doc """

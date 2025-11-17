@@ -2088,26 +2088,24 @@ defmodule Explorer.Chain do
 
     # Optimized query: Scan blocks from newest to oldest with EXISTS subquery
     # This is much faster than JOIN + GROUP BY approach
-    block_query =
-      from(b in Block,
-        as: :block,
-        where: b.timestamp >= ^one_week_ago,
-        where: b.consensus == true,
-        where:
-          exists(
-            from(tx in Transaction,
-              where: tx.block_number == parent_as(:block).number,
-              where: not is_nil(tx.index),
-              where: tx.from_address_hash != ^op_node_address_hash,
-              limit: 1
-            )
-          ),
-        order_by: [desc: b.timestamp],
-        limit: ^paging_options.page_size
-      )
-
-    block_query = join_associations(block_query, necessity_by_association)
-    Repo.all(block_query)
+    from(b in Block,
+      as: :block,
+      where: b.timestamp >= ^one_week_ago,
+      where: b.consensus == true,
+      where:
+        exists(
+          from(tx in Transaction,
+            where: tx.block_number == parent_as(:block).number,
+            where: not is_nil(tx.index),
+            where: tx.from_address_hash != ^op_node_address_hash,
+            limit: 1
+          )
+        ),
+      order_by: [desc: b.timestamp],
+      limit: ^paging_options.page_size
+    )
+    |> join_associations(necessity_by_association)
+    |> Repo.all()
   end
 
   def get_op_node_to_address, do: System.get_env("OP_NODE_TO_ADDRESS") || @op_node_to_address_hash
@@ -2178,43 +2176,56 @@ defmodule Explorer.Chain do
     case paging_options do
       %PagingOptions{key: {0, 0}, is_index_in_asc_order: false} ->
         []
+
       _ ->
-        # Address to filter out
-        op_node_address = get_op_node_from_address()
-        {:ok, op_node_address_hash} = Chain.string_to_address_hash(op_node_address)
-
-        # One week ago timestamp
-        one_week_ago = DateTime.utc_now() |> DateTime.add(-7, :day)
-
-        # OPTIMIZED: Use block_timestamp index instead of EXISTS subquery
-        # This is MUCH faster (~100x) because:
-        # 1. block_timestamp has an index
-        # 2. No need to JOIN with blocks table
-        # 3. Filter by timestamp FIRST before other filters (most selective)
-        query =
-          from(t in Transaction,
-            where: t.block_timestamp >= ^one_week_ago,
-            where: not is_nil(t.block_number),
-            where: not is_nil(t.index),
-            where: t.from_address_hash != ^op_node_address_hash,
-            order_by: [desc: t.block_timestamp, desc: t.index],
-            limit: ^paging_options.page_size
-          )
-          |> apply_filter_by_method_id_to_transactions(method_id_filter)
-          |> apply_filter_by_type_to_transactions(type_filter)
-          |> join_associations(necessity_by_association)
-          |> Transaction.put_has_token_transfers_to_transaction(old_ui?)
-
-        query = if old_ui?, do: preload(query, [{:token_transfers, [:token, :from_address, :to_address]}]), else: query
-        results = Repo.all(query)
-        if old_ui? do
-          results
-        else
-          Enum.map(results, fn transaction ->
-            preload_token_transfers(transaction, @token_transfers_necessity_by_association, options)
-          end)
-        end
+        fetch_and_process_home_transactions(old_ui?, paging_options, necessity_by_association, method_id_filter, type_filter, options)
     end
+  end
+
+  defp fetch_and_process_home_transactions(old_ui?, paging_options, necessity_by_association, method_id_filter, type_filter, options) do
+    # Address to filter out
+    op_node_address = get_op_node_from_address()
+    {:ok, op_node_address_hash} = Chain.string_to_address_hash(op_node_address)
+
+    # One week ago timestamp
+    one_week_ago = DateTime.utc_now() |> DateTime.add(-7, :day)
+
+    # OPTIMIZED: Use block_timestamp index instead of EXISTS subquery
+    # This is MUCH faster (~100x) because:
+    # 1. block_timestamp has an index
+    # 2. No need to JOIN with blocks table
+    # 3. Filter by timestamp FIRST before other filters (most selective)
+    query =
+      from(t in Transaction,
+        where: t.block_timestamp >= ^one_week_ago,
+        where: not is_nil(t.block_number),
+        where: not is_nil(t.index),
+        where: t.from_address_hash != ^op_node_address_hash,
+        order_by: [desc: t.block_timestamp, desc: t.index],
+        limit: ^paging_options.page_size
+      )
+
+    query
+    |> apply_filter_by_method_id_to_transactions(method_id_filter)
+    |> apply_filter_by_type_to_transactions(type_filter)
+    |> join_associations(necessity_by_association)
+    |> Transaction.put_has_token_transfers_to_transaction(old_ui?)
+    |> maybe_preload_token_transfers_for_old_ui(old_ui?)
+    |> Repo.all()
+    |> process_home_transaction_results(old_ui?, options)
+  end
+
+  defp maybe_preload_token_transfers_for_old_ui(query, true),
+    do: preload(query, [{:token_transfers, [:token, :from_address, :to_address]}])
+
+  defp maybe_preload_token_transfers_for_old_ui(query, false), do: query
+
+  defp process_home_transaction_results(results, true, _options), do: results
+
+  defp process_home_transaction_results(results, false, options) do
+    Enum.map(results, fn transaction ->
+      preload_token_transfers(transaction, @token_transfers_necessity_by_association, options)
+    end)
   end
 
   def fetch_recent_collated_transactions_for_rap(paging_options, necessity_by_association) do
@@ -4284,12 +4295,13 @@ defmodule Explorer.Chain do
     {:ok, from_address_filter} = Chain.string_to_address_hash(get_op_node_from_address())
 
     query
-    |> where([transaction],
-        not is_nil(transaction.block_number) and
+    |> where(
+      [transaction],
+      not is_nil(transaction.block_number) and
         not is_nil(transaction.index) and
         transaction.to_address_hash != ^to_address_filter and
         transaction.from_address_hash != ^from_address_filter
-      )
+    )
   end
 
   def transactions_available_for_home(page_size) do
