@@ -2179,11 +2179,25 @@ defmodule Explorer.Chain do
         []
 
       _ ->
-        fetch_and_process_home_transactions(old_ui?, paging_options, necessity_by_association, method_id_filter, type_filter, options)
+        fetch_and_process_home_transactions(
+          old_ui?,
+          paging_options,
+          necessity_by_association,
+          method_id_filter,
+          type_filter,
+          options
+        )
     end
   end
 
-  defp fetch_and_process_home_transactions(old_ui?, paging_options, necessity_by_association, method_id_filter, type_filter, options) do
+  defp fetch_and_process_home_transactions(
+         old_ui?,
+         paging_options,
+         necessity_by_association,
+         method_id_filter,
+         type_filter,
+         options
+       ) do
     # Address to filter out
     op_node_address = get_op_node_from_address()
     {:ok, op_node_address_hash} = Chain.string_to_address_hash(op_node_address)
@@ -4290,5 +4304,4 @@ defmodule Explorer.Chain do
   def default_paging_options do
     @default_paging_options
   end
-
 end
