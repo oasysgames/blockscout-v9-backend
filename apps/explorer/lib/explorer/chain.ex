@@ -120,6 +120,7 @@ defmodule Explorer.Chain do
 
   @limit_showing_transactions 10_000
 
+  @op_node_to_address_hash "0x4200000000000000000000000000000000000015"
   @op_node_from_address_hash "0xDeaDDEaDDeAdDeAdDEAdDEaddeAddEAdDEAd0001"
 
   @typedoc """
@@ -4290,25 +4291,4 @@ defmodule Explorer.Chain do
     @default_paging_options
   end
 
-  defp filter_transactions(query) do
-    {:ok, to_address_filter} = Chain.string_to_address_hash(get_op_node_to_address())
-    {:ok, from_address_filter} = Chain.string_to_address_hash(get_op_node_from_address())
-
-    query
-    |> where(
-      [transaction],
-      not is_nil(transaction.block_number) and
-        not is_nil(transaction.index) and
-        transaction.to_address_hash != ^to_address_filter and
-        transaction.from_address_hash != ^from_address_filter
-    )
-  end
-
-  def transactions_available_for_home(page_size) do
-    Transaction
-    |> filter_transactions()
-    |> limit(^page_size)
-    |> order_by(desc: :block_number)
-    |> select_repo([]).all()
-  end
 end
