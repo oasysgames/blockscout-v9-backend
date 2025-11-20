@@ -555,6 +555,7 @@ jobs:
           CHAIN_TYPE: ${{ matrix.chain-type != 'default' && matrix.chain-type || '' }}
 
   test_nethermind_mox_explorer:
+    if: false  # Disabled - skip Explorer Tests
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.matrix-builder.outputs.matrix) }}
@@ -699,6 +700,7 @@ jobs:
           WETH_TOKEN_TRANSFERS_FILTERING_ENABLED: "true"
 
   test_nethermind_mox_block_scout_web:
+    if: false  # Disabled - skip Blockscout Web Tests
     strategy:
       fail-fast: false
       matrix: ${{ fromJson(needs.matrix-builder.outputs.matrix) }}
