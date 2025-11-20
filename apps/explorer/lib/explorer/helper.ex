@@ -2,6 +2,7 @@ defmodule Explorer.Helper do
   @moduledoc """
   Auxiliary common functions.
   """
+  require Logger
 
   alias ABI.TypeDecoder
   alias Explorer.Chain
@@ -39,7 +40,7 @@ defmodule Explorer.Helper do
   address.
 
   ## Parameters
-  - `address_hash` (`EthereumJSONRPC.hash()` | `nil`): The full address hash to
+  - `address_hash` (`EthereumJSONRPC.hash()` | `Hash.t()` | `nil`): The full address hash to
     be truncated, or `nil`.
 
   ## Returns
@@ -51,11 +52,20 @@ defmodule Explorer.Helper do
       iex> truncate_address_hash("0x000000000000000000000000abcdef1234567890abcdef1234567890abcdef")
       "0xabcdef1234567890abcdef1234567890abcdef"
 
+      iex> truncate_address_hash(%Explorer.Chain.Hash{byte_count: 32, bytes: <<0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 66, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7>>})
+      "0x4200000000000000000000000000000000000007"
+
       iex> truncate_address_hash(nil)
       "0x0000000000000000000000000000000000000000"
   """
-  @spec truncate_address_hash(EthereumJSONRPC.hash() | nil) :: EthereumJSONRPC.address()
+  @spec truncate_address_hash(EthereumJSONRPC.hash() | Hash.t() | nil) :: EthereumJSONRPC.address()
   def truncate_address_hash(address_hash)
+
+  def truncate_address_hash(%Hash{} = address_hash) do
+    address_hash
+    |> Hash.to_string()
+    |> truncate_address_hash()
+  end
 
   def truncate_address_hash(nil), do: burn_address_hash_string()
 
@@ -630,4 +640,57 @@ defmodule Explorer.Helper do
   def number_to_decimal(value) when is_float(value), do: Decimal.from_float(value)
   def number_to_decimal(value) when is_binary(value) or is_integer(value), do: Decimal.new(value)
   def number_to_decimal(%Decimal{} = value), do: value
+
+  @doc """
+  Determines whether the specified node is configured to run indexer operations.
+
+  This function checks if the node's `:explorer` application mode is set to
+  either `:all` or `:indexer`. It performs a remote procedure call to retrieve
+  the application environment configuration from the target node. If the RPC
+  call fails or the mode is set to a different value, the function returns
+  `false`.
+
+  ## Parameters
+  - `node`: The node to check for indexer configuration.
+
+  ## Returns
+  - `true` if the node's mode is `:all` or `:indexer`
+  - `false` if the node's mode is any other value, not set, or if the RPC call
+    fails
+  """
+  @spec indexer_node?(Node.t()) :: boolean()
+  def indexer_node?(node) do
+    (node |> :rpc.call(Application, :get_env, [:explorer, :mode]) |> process_rpc_response(node, nil)) in [
+      :all,
+      :indexer
+    ]
+  end
+
+  @doc """
+  Processes the response from a remote procedure call, handling errors gracefully.
+
+  This function examines the RPC response and returns either the successful
+  result or a fallback value if the RPC call failed. When a `{:badrpc, reason}`
+  error tuple is encountered, it logs an error message including the node name
+  and error details, then returns the provided fallback value. For successful
+  responses, the original response is returned unchanged.
+
+  ## Parameters
+  - `response`: The result from an RPC call, either a successful value or a
+    `{:badrpc, reason}` error tuple
+  - `node`: The node that was called via RPC, used for error logging
+  - `fallback`: The value to return if the RPC call failed
+
+  ## Returns
+  - The original response if the RPC call succeeded
+  - The fallback value if the RPC call failed with a `{:badrpc, reason}` error
+  """
+  @spec process_rpc_response(res | {:badrpc, reason}, Node.t(), fallback) :: res | fallback
+        when res: any(), reason: any(), fallback: any()
+  def process_rpc_response({:badrpc, _reason} = error, node, fallback) do
+    Logger.error("Received an error from #{node}: #{inspect(error)}")
+    fallback
+  end
+
+  def process_rpc_response(response, _node, _fallback), do: response
 end

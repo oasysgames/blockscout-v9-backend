@@ -103,7 +103,7 @@ defmodule Explorer.Application do
     opts = [strategy: :one_for_one, name: Explorer.Supervisor, max_restarts: 1_000]
 
     if Application.get_env(:nft_media_handler, :standalone_media_worker?) do
-      Supervisor.start_link([], opts)
+      Supervisor.start_link([libcluster()] |> List.flatten(), opts)
     else
       Supervisor.start_link(children, opts)
     end
@@ -112,6 +112,7 @@ defmodule Explorer.Application do
   defp configurable_children do
     configurable_children_set =
       [
+        configure_libcluster(),
         configure_mode_dependent_process(Explorer.Market.Fetcher.Coin, :api),
         configure_mode_dependent_process(Explorer.Market.Fetcher.Token, :indexer),
         configure_mode_dependent_process(Explorer.Market.Fetcher.History, :indexer),
@@ -162,6 +163,7 @@ defmodule Explorer.Application do
         configure_mode_dependent_process(Explorer.Migrator.FilecoinPendingAddressOperations, :indexer),
         configure_mode_dependent_process(Explorer.Migrator.SmartContractLanguage, :indexer),
         configure_mode_dependent_process(Explorer.Migrator.CeloL2Epochs, :indexer),
+        configure_mode_dependent_process(Explorer.Migrator.CeloAccounts, :indexer),
         configure_mode_dependent_process(Explorer.Migrator.SanitizeErc1155TokenBalancesWithoutTokenIds, :indexer),
         Explorer.Migrator.BackfillMultichainSearchDB
         |> configure_mode_dependent_process(:indexer)
@@ -194,6 +196,7 @@ defmodule Explorer.Application do
         configure_mode_dependent_process(Explorer.Migrator.UnescapeQuotesInTokens, :indexer),
         configure_mode_dependent_process(Explorer.Migrator.ReindexBlocksWithMissingTransactions, :indexer),
         configure_mode_dependent_process(Explorer.Migrator.SanitizeDuplicateSmartContractAdditionalSources, :indexer),
+        configure_mode_dependent_process(Explorer.Migrator.DeleteZeroValueInternalTransactions, :indexer),
         configure_mode_dependent_process(
           Explorer.Migrator.HeavyDbIndexOperation.CreateAddressesVerifiedIndex,
           :indexer
@@ -306,6 +309,10 @@ defmodule Explorer.Application do
         ),
         configure_mode_dependent_process(
           Explorer.Migrator.HeavyDbIndexOperation.CreateSmartContractAdditionalSourcesUniqueIndex,
+          :indexer
+        ),
+        configure_mode_dependent_process(
+          Explorer.Migrator.HeavyDbIndexOperation.CreateTransactionsOperatorFeeConstantIndex,
           :indexer
         ),
         Explorer.Migrator.RefetchContractCodes |> configure() |> configure_chain_type_dependent_process(:zksync),
@@ -481,4 +488,15 @@ defmodule Explorer.Application do
   defp redix_opts do
     {System.get_env("ACCOUNT_REDIS_URL") || "redis://127.0.0.1:6379", [name: :redix]}
   end
+
+  defp configure_libcluster do
+    if Application.get_env(:explorer, :mode) in [:indexer, :api] do
+      libcluster()
+    else
+      []
+    end
+  end
+
+  defp libcluster,
+    do: {Cluster.Supervisor, [Application.get_env(:libcluster, :topologies), [name: Explorer.ClusterSupervisor]]}
 end
