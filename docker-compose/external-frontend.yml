@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   redis-db:
     extends:
@@ -38,7 +36,7 @@ services:
         CACHE_TOTAL_GAS_USAGE_COUNTER_ENABLED: ""
         CACHE_ADDRESS_WITH_BALANCES_UPDATE_INTERVAL: ""
         ADMIN_PANEL_ENABLED: ""
-        BLOCKSCOUT_VERSION: 9.1.1
+        RELEASE_VERSION: 9.1.1
     links:
       - db:database
 
@@ -97,7 +95,7 @@ services:
       file: ./services/nginx.yml
       service: proxy
 
-  error-scanner:
-    extends:
-      file: ./services/error-scanner.yml
-      service: error-scanner
+  # error-scanner:
+  #   extends:
+  #     file: ./services/error-scanner.yml
+  #     service: error-scanner
