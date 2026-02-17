@@ -77,7 +77,7 @@ defmodule BlockScoutWeb.API.V2.BlockView do
   end
 
   # When block has no rewards in DB (e.g. chain doesn't support fetch_beneficiaries), use priority_fee as validator reward
-  def prepare_rewards(rewards, block, single_block?)
+  def prepare_rewards(rewards, block, _single_block?)
       when rewards in [nil, []] do
     case fallback_reward_from_priority_fee(block) do
       nil -> []
